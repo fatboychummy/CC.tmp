@@ -1,0 +1,105 @@
+{
+  "modID": "computercraft",
+  "modVersion": "1.111.0",
+  "peripheralType": "inventory",
+
+  "methods": [
+    {
+      "name": "size",
+      "description": "Returns the size, in slots, of this inventory.",
+      "shortDescription": "Get the size of the inventory.",
+      "mainThread": true,
+      "arguments": [],
+      "returnValues": [
+        {
+          "name": "size",
+          "description": "The size, in slots, of this inventory.",
+          "shortDescription": "The size of the inventory.",
+          "luaType": "number",
+          "vararg": false,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "list",
+      "description": "Returns a sparse list of basic item data contained within the inventory.",
+      "shortDescription": "Get a list of items in the inventory.",
+      "mainThread": true,
+      "arguments": [],
+      "returnValues": [
+        {
+          "name": "items",
+          "description": [
+            "A sparse list of basic item data tables. The key is the slot number, and the value is the item data. The following data is stored in each table:",
+            "- `name`: The name of the item, for example, `\"minecraft:stick\"`",
+            "- `count`: The amount of the item in the slot.",
+            "- `nbt`: A potentially nil value containing the hash of the nbt data.",
+            "",
+            "See `getItemDetail` if you need more information about an item."
+          ],
+          "shortDescription": "A list of items in the inventory.",
+          "luaType": "table",
+          "vararg": false,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "getItemDetail",
+      "description": "Returns detailed information about a single item in the inventory.",
+      "shortDescription": "Gets detailed info about a single item.",
+      "mainThread": true,
+      "arguments": [
+        {
+          "name": "slot",
+          "description": "The slot of the item you want to get more detail about.",
+          "shortDescription": "The slot to get information about.",
+          "luaType": "number",
+          "vararg": false,
+          "required": true
+        }
+      ],
+      "returnValues": [
+        {
+          "name": "detailedInfo",
+          "description": [
+            "Detailed information about an item. This includes information from `list`, as well as some more:",
+            "- `displayName`: The actual display name of the item, for example, \"Stick\".",
+            " // TODO: add the rest of this. "
+          ],
+          "shortDescription": "Detailed information about an item.",
+          "luaType": "table",
+          "vararg": false,
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "getItemLimit",
+      "description": "Returns the maximum stack size of items for the given slot.",
+      "shortDescription": "Get the maximum stack size of a slot.",
+      "mainThread": true,
+      "arguments": [
+        {
+          "name": "slot",
+          "description": "The slot of you wish to check.",
+          "shortDescription": "The slot.",
+          "luaType": "number",
+          "vararg": false,
+          "required": true
+        }
+      ],
+      "returnValues": [
+        {
+          "name": "limit",
+          "description": "The maximum number of items in this slot.",
+          "shortDescription": "The maximum number of items in this slot.",
+          "luaType": "number",
+          "vararg": false,
+          "required": true
+        }
+      ]
+    }
+  ]
+}

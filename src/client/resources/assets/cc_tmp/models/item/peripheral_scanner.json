@@ -1,0 +1,11 @@
+{
+  "parent": "cc_tmp:item/peripheral_scanner/peripheral_scanner_closed",
+  "overrides": [
+    {
+      "predicate": {
+        "cc_tmp:scanning": 1
+      },
+      "model": "cc_tmp:item/peripheral_scanner/peripheral_scanner_open"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "item.cc_tmp.peripheral_goggles": "Peripheral Goggles",
+  "item.cc_tmp.peripheral_scanner": "Peripheral Scanner",
+
+  "docs.cc_tmp.example_mod.version.block_id.description": "Yarrr",
+  "docs.cc_tmp.no_description": "No description available.",
+  "docs.cc_tmp.no_argument_description": "No argument description available.",
+  "docs.cc_tmp.no_return_information": "No information about return values available.",
+  "h": "h"
+}

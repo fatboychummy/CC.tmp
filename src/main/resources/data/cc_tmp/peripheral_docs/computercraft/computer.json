@@ -1,0 +1,16 @@
+{
+  "modID": "computercraft",
+  "modVersion": "1.111.0",
+  "peripheralType": "computer",
+
+  "methods": [
+    {
+      "name": "reboot",
+      "description": "Reboots the target computer, interrupting whatever it is doing.",
+      "shortDescription": "Reboots the computer.",
+      "mainThread": true,
+      "arguments": [],
+      "returnValues": []
+    }
+  ]
+}

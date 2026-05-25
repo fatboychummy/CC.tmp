@@ -1,0 +1,114 @@
+{
+  "modID": "computercraft",
+  "modVersion": "1.111.0",
+  "peripheralType": "fluid_storage",
+
+  "methods": [
+    {
+      "name": "tanks",
+      "description": "Get all the 'tanks' stored in this block. Each tank can hold a single fluid.",
+      "shortDescription": "Get the tanks in this storage.",
+      "mainThread": true,
+      "arguments": [],
+      "returnValues": [
+        {
+          "name": "tanks",
+          "description": [
+            "The different tanks in this fluid storage. Each tank is a table containing the following parameters:",
+            "- `name`: The name of the fluid stored in the tank.",
+            "- `amount`: The current amount of fluid stored in this tank.",
+            " //TODO: Need to verify this "
+          ],
+          "shortDescription": "The different tanks in this fluid storage.",
+          "luaType": "table",
+          "vararg": true,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "pushFluid",
+      "description": "Pushes a fluid from this container to another. Throws an error if the target container does not exist on the network. The target container does not need to have the `fluid_storage` type to receive fluids.",
+      "shortDescription": "Pushes a fluid from this container to another.",
+      "mainThread": true,
+      "arguments": [
+        {
+          "name": "toName",
+          "description": "The target container to push fluid to. If this target does not exist on the network, will throw an error.",
+          "shortDescription": "The target container to push fluid to.",
+          "luaType": "string",
+          "vararg": false,
+          "required": true
+        },
+        {
+          "name": "limit",
+          "description": "The maximum amount of fluid to push. Note that this is a limit, not an absolute amount. If the target storage cannot hold this amount of fluid, it will instead only push as much fluid as it can hold.",
+          "shortDescription": "The maximum amount of fluid to push.",
+          "luaType": "number",
+          "vararg": false,
+          "required": false
+        },
+        {
+          "name": "fluidName",
+          "description": "If this fluid storage supports multiple tanks, you can specify the fluid to move by its name. If this is omitted, an arbitrary fluid will be selected.",
+          "shortDescription": "The fluid to move.",
+          "luaType": "string",
+          "vararg": false,
+          "required": false
+        }
+      ],
+      "returnValues": [
+        {
+          "name": "amountMoved",
+          "description": "The amount of fluid moved.",
+          "shortDescription": "The amount of fluid moved.",
+          "luaType": "number",
+          "vararg": false,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "pullFluid",
+      "description": "Pulls a fluid from the target container to this one. Throws an error if the target container does not exist on the network. The target container does not need to have the `fluid_storage` type to send fluids.",
+      "shortDescription": "Pulls a fluid from another container to this one.",
+      "mainThread": true,
+      "arguments": [
+        {
+          "name": "fromName",
+          "description": "The target container to pull fluid from. If this target does not exist on the network, will throw an error.",
+          "shortDescription": "The target container to pull fluid from.",
+          "luaType": "string",
+          "vararg": false,
+          "required": true
+        },
+        {
+          "name": "limit",
+          "description": "The maximum amount of fluid to pull. Note that this is a limit, not an absolute amount. If this storage cannot hold this amount of fluid, it will instead only pull as much fluid as it can hold.",
+          "shortDescription": "The maximum amount of fluid to push.",
+          "luaType": "number",
+          "vararg": false,
+          "required": false
+        },
+        {
+          "name": "fluidName",
+          "description": "If the target fluid storage supports multiple tanks, you can specify the fluid to move by its name. If this is omitted, an arbitrary fluid will be selected.",
+          "shortDescription": "The fluid to move.",
+          "luaType": "string",
+          "vararg": false,
+          "required": false
+        }
+      ],
+      "returnValues": [
+        {
+          "name": "amountMoved",
+          "description": "The amount of fluid moved.",
+          "shortDescription": "The amount of fluid moved.",
+          "luaType": "number",
+          "vararg": false,
+          "required": true
+        }
+      ]
+    }
+  ]
+}

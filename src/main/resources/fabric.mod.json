@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "cc_tmp",
+  "version": "${version}",
+  "name": "CC.tmp",
+  "description": "CC: Too Many Peripherals",
+  "authors": [],
+  "contact": {},
+  "license": "MIT",
+  "icon": "assets/cc_tmp/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "games.fatboychummy.cc_tmp.client.Cc_tmpDataGenerator"
+    ],
+    "client": [
+      "games.fatboychummy.cc_tmp.client.Cc_tmpClient"
+    ],
+    "main": [
+      "games.fatboychummy.cc_tmp.Cc_tmp"
+    ]
+  },
+  "mixins": [
+    "cc_tmp.mixins.json",
+    {
+      "config": "cc_tmp.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}",
+    "computercraft": "*"
+  }
+}

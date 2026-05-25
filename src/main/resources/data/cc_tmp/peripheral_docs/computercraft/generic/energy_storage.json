@@ -1,0 +1,42 @@
+{
+  "modID": "computercraft",
+  "modVersion": "1.111.0",
+  "peripheralType": "energy_storage",
+
+  "methods": [
+    {
+      "name": "getEnergy",
+      "description": "Gets the current energy stored in this block, usually in FE.",
+      "shortDescription": "Get the energy in this block.",
+      "mainThread": true,
+      "arguments": [],
+      "returnValues": [
+        {
+          "name": "energy",
+          "description": "The energy stored in this energy storage.",
+          "shortDescription": "The energy stored in this energy storage.",
+          "luaType": "number",
+          "vararg": false,
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "getEnergyCapacity",
+      "description": "Gets the maximum amount of energy able to be stored in this block.",
+      "shortDescription": "Get the max energy this block can hold.",
+      "mainThread": true,
+      "arguments": [],
+      "returnValues": [
+        {
+          "name": "maxEnergy",
+          "description": "The maximum energy that can be stored in this energy storage.",
+          "shortDescription": "The maximum energy of this energy storage.",
+          "luaType": "number",
+          "vararg": false,
+          "required": true
+        }
+      ]
+    }
+  ]
+}
