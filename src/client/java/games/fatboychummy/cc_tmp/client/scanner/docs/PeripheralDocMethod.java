@@ -7,6 +7,6 @@ public record PeripheralDocMethod(
         String description,
         String shortDescription,
         boolean mainThread,
-        ArrayList<PeripheralDocParameter> arguments,
-        ArrayList<PeripheralDocParameter> returnValues
+        PeripheralDocParameter[] arguments,
+        PeripheralDocParameter[] returnValues
 ) {}

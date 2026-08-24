@@ -152,6 +152,7 @@ public class PeripheralScannerItem extends Item {
             BlockApiLookup.BlockApiProvider<IPeripheral, Direction> provider = PeripheralLookup.get().getProvider(block);
 
             // Then, check if a generic peripheral exists for this peripheral.
+            @SuppressWarnings("UnstableApiUsage") // Currently the only way of reading generic peripherals.
             IPeripheral generic = Peripherals.getGenericPeripheral(serverLevel, scanPos, Direction.UP, be, null);
 
             // If neither exist, fail.
@@ -172,6 +173,8 @@ public class PeripheralScannerItem extends Item {
             } else {
                 // If it's not a generic peripheral, check for a peripheral at the given position
                 // I have no clue what the 'context' value (the last null) is supposed to be.
+                // Update: Squid clarified: It is the direction being accessed from
+                // We can use the direction to the player here maybe?
                 IPeripheral peripheral = provider.find(serverLevel, scanPos, state, be, null);
                 if (peripheral == null) { // No peripheral, fail.
                     Cc_tmp.LOGGER.warn("No peripheral for {}", block.getName().getString());

@@ -19,5 +19,7 @@ public class Cc_tmp implements ModInitializer {
     public void onInitialize() {
         tmpItems.initItems();
         tmpBlocks.initBlocks();
+
+        DebugInteraction.init();
     }
 }

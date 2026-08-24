@@ -6,5 +6,8 @@
   "docs.cc_tmp.no_description": "No description available.",
   "docs.cc_tmp.no_argument_description": "No argument description available.",
   "docs.cc_tmp.no_return_information": "No information about return values available.",
-  "h": "h"
+
+  "gui.scan_finished.title": "Scan complete!",
+  "gui.scan_finished.no_docs": "**No documentation available.**",
+  "gui.scan_finished.peripheral_no_docs": "**Peripheral found but no documentation available.**"
 }

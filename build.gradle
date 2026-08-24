@@ -36,6 +36,7 @@ repositories {
     maven {
         url = "https://squiddev.cc/maven"
     }
+    mavenCentral()
 }
 
 dependencies {
@@ -43,6 +44,7 @@ dependencies {
     compileOnly "com.demonwav.mcdev:annotations:2.1.0"
 
     implementation "org.apache.maven:maven-artifact:3.9.9"
+    implementation "com.vladsch.flexmark:flexmark:${project.flexmark_version}"
 
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()

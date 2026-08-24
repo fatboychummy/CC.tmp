@@ -4,6 +4,8 @@ import games.fatboychummy.cc_tmp.exceptions.JsonStructureException;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,34 +14,55 @@ import java.util.Map;
 public class PeripheralDoc {
     public static int loadedMethods = 0;
     private int loadedThisTime = 0;
-    private final String modID;
-    private final String modVersion;
-    private final String peripheralType;
+    private final @NotNull String modID;
+    private final @NotNull String modVersion;
+    private final @NotNull String peripheralType;
+    private @Nullable String docSite = null;
     private final ArrayList<PeripheralDocMethod> methods;
-    private final HashMap<String, Integer> methodLookup;
+    private final HashMap<String, Integer> methodLookup; // MethodName -> methods[x] (returns x)
+    private final HashMap<String, ArrayList<String>> methodAliases; // Actual -> Alias1, Alias2, ...
 
-    public final String getUniqueIdentifier() {
-        return modID + ":" + modVersion + ":" + peripheralType;
+    public final @NotNull String[] getMethodNames() {
+        ArrayList<String> names = new ArrayList<>();
+
+        for (PeripheralDocMethod method : methods) {
+            names.add(method.name());
+        }
+
+        return names.toArray(String[]::new);
     }
 
-    public final String getModVersion() {
+    public final @Nullable PeripheralDocMethod getMethod(String methodName) {
+        return methods.get(methodLookup.get(methodName));
+    }
+
+    public final @NotNull String[] getAliases(String methodName) {
+        return new ArrayList<>(methodAliases.getOrDefault(methodName, new ArrayList<>())).toArray(String[]::new);
+    }
+
+    public final @NotNull String getModVersion() {
         return modVersion;
     }
 
-    public final String getPeripheralType() {
+    public final @NotNull String getPeripheralType() {
         return peripheralType;
     }
 
-    public final String getModID() {
+    public final @NotNull String getModID() {
         return modID;
     }
 
-    public PeripheralDoc(String modID, String modVersion, String peripheralType) {
+    public final @Nullable String getDocSite() {
+        return docSite;
+    }
+
+    public PeripheralDoc(@NotNull String modID, @NotNull String modVersion, @NotNull String peripheralType) {
         this.modID = modID;
         this.modVersion = modVersion;
         this.peripheralType = peripheralType;
         this.methods = new ArrayList<>();
         this.methodLookup = new HashMap<>();
+        this.methodAliases = new HashMap<>();
     }
 
     /**
@@ -59,6 +82,10 @@ public class PeripheralDoc {
 
     private static PeripheralDoc _fromJson(PeripheralDoc doc, JsonObject json) throws JsonStructureException {
         validateBase(json);
+
+        if (json.has("docSite")) {
+            doc.docSite =  json.get("docSite").getAsString();
+        }
 
         JsonArray methods = json.getAsJsonArray("methods");
         validateMethods(methods);
@@ -87,14 +114,20 @@ public class PeripheralDoc {
             getParameterList(argumentsArray, arguments);
             getParameterList(returnValuesArray, returnValues);
 
-            doc.methods.add(new PeripheralDocMethod(
+
+            PeripheralDocMethod pdMethod = new PeripheralDocMethod(
                     name,
                     description,
                     shortDescription,
                     mainThread,
-                    arguments,
-                    returnValues
-            ));
+                    arguments.toArray(PeripheralDocParameter[]::new),
+                    returnValues.toArray(PeripheralDocParameter[]::new)
+            );
+            doc.methods.add(pdMethod);
+            doc.methodLookup.put(
+                    name,
+                    doc.methods.indexOf(pdMethod)
+            );
             doc.loadOne();
         }
 
@@ -109,19 +142,11 @@ public class PeripheralDoc {
             }
 
             if (i == null || method == null) {
-                doc.unload();
                 throw new JsonStructureException("Method " + actual + " not found for alias " + alias);
             }
 
-            doc.methods.add(new PeripheralDocMethod(
-                    alias,
-                    method.description(),
-                    method.shortDescription(),
-                    method.mainThread(),
-                    method.arguments(),
-                    method.returnValues()
-            ));
-            doc.loadOne();
+            doc.methodAliases.computeIfAbsent(actual, k -> new ArrayList<>())
+                    .add(alias);
         }
 
         return doc;
@@ -232,6 +257,9 @@ public class PeripheralDoc {
         stringOrExcept(json, "modID");
         stringOrExcept(json, "modVersion");
         stringOrExcept(json, "peripheralType");
+        if (json.has("docSite")) {
+            stringOrExcept(json, "docSite");
+        }
 
         arrayOrExcept(json, "methods");
     }

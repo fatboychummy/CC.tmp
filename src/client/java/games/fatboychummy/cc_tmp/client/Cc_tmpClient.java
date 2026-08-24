@@ -1,13 +1,14 @@
 package games.fatboychummy.cc_tmp.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import dan200.computercraft.api.network.wired.WiredNetwork;
 import games.fatboychummy.cc_tmp.Cc_tmp;
 import games.fatboychummy.cc_tmp.block.tmpBlocks;
+import games.fatboychummy.cc_tmp.client.goggles.GoggleNetworkPacketHandler;
 import games.fatboychummy.cc_tmp.client.scanner.PeripheralDocResolver;
 import games.fatboychummy.cc_tmp.client.scanner.docs.PeripheralDocRegistry;
-import games.fatboychummy.cc_tmp.client.scanner.docs.render.PacketListener;
-import games.fatboychummy.cc_tmp.client.scanner.docs.render.ScannerScreen;
-import games.fatboychummy.cc_tmp.event.ScannerUIEvents;
+import games.fatboychummy.cc_tmp.client.scanner.docs.render.ScanCompletePacketHandler;
+import games.fatboychummy.cc_tmp.client.goggles.render.GoggleRenderer;
 import games.fatboychummy.cc_tmp.item.PeripheralScannerItem;
 import games.fatboychummy.cc_tmp.item.tmpItems;
 import games.fatboychummy.cc_tmp.packet.tmpPackets;
@@ -24,7 +25,6 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.block.BlockRenderDispatcher;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -36,6 +36,7 @@ public class Cc_tmpClient implements ClientModInitializer {
     public void onInitializeClient() {
         Cc_tmp.LOGGER.info("Initializing Too Many Peripherals Client");
         PeripheralDocResolver.init();
+        GoggleRenderer.init();
 
         FabricModelPredicateProviderRegistry.register(
                 tmpItems.PERIPHERAL_SCANNER,
@@ -55,7 +56,12 @@ public class Cc_tmpClient implements ClientModInitializer {
 
         ClientPlayNetworking.registerGlobalReceiver(
                 tmpPackets.SCAN_COMPLETE,
-                PacketListener::listen
+                ScanCompletePacketHandler::listen
+        );
+
+        ClientPlayNetworking.registerGlobalReceiver(
+                tmpPackets.GOGGLES_NETWORK,
+                GoggleNetworkPacketHandler::listen
         );
     }
 
