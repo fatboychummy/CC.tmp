@@ -41,7 +41,8 @@ public class GoggleNetworkPacket {
         }
         for (int i = 0; i < peripheralCount; i++) {
             peripherals.add(new PeripheralNode(
-                    PacketHelper.readVec3i(buf), // Order is important, Position *then* name.
+                    PacketHelper.readVec3i(buf), // Order is important, Position of peripheral, position of origin, *then* name.
+                    PacketHelper.readVec3i(buf),
                     PacketHelper.readString(buf)
             ));
         }
@@ -89,7 +90,8 @@ public class GoggleNetworkPacket {
      * 0. [Vec3i] (3x ints) Position
      * Where a peripheral is the following:
      * 0. [Vec3i] (3x ints) Position
-     * 1. [String] Name
+     * 1. [Vec3i] (3x ints) Origin Position (the wired modem this peripheral connects to).
+     * 2. [String] Name
      * Where a Node connection is the following:
      * 0. [int] from (node list)
      * 1. [int] to (node list)
@@ -127,6 +129,7 @@ public class GoggleNetworkPacket {
         // Write peripherals
         for (PeripheralNode node : peripherals) {
             PacketHelper.writeVec3i(buf, node.position());
+            PacketHelper.writeVec3i(buf, node.originPosition());
             PacketHelper.writeString(buf, node.name());
         }
 

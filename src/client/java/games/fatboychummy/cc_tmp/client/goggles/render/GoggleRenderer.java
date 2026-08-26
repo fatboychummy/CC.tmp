@@ -56,84 +56,65 @@ public class GoggleRenderer {
         // The third pass will call `renderNetworkLines` on each network.
         // The fourth pass will call `renderNetworkNametags` on each network.
 
-        Map<Vec3i, Integer> positionCounts = new HashMap<>();
-        Map<Vec3i, List<Double>> finalOffsets = new HashMap<>();
-
-        // First pass.
-        for (SimpleWiredNetwork network : networks) {
-            for (SimpleWiredNode node : network.getNodes()) {
-                for (PeripheralNode peripheral : node.peripherals()) {
-                    positionCounts.merge(peripheral.position(), 1, Integer::sum);
-                }
-            }
-        }
-
         // Second pass
         for (SimpleWiredNetwork network : networks) {
-            renderNetworkNodes(context, matrices, camera, network, positionCounts, finalOffsets);
+            renderNetworkNodes(matrices, camera, network);
+        }
+        for (SimpleWiredNetwork network : networks) {
+            renderNetworkLeaves(matrices, camera, network);
         }
 
         // Third pass
         for (SimpleWiredNetwork network : networks) {
-            renderNetworkConnections(context, matrices, camera, network, positionCounts, finalOffsets);
+            renderNetworkConnections(matrices, camera, network);
         }
 
         // Fourth pass
         for (SimpleWiredNetwork network : networks) {
-            renderNetworkNametags(context, matrices, camera, network, positionCounts);
+            renderNetworkNametags(matrices, camera, network);
         }
     }
 
-    private static void renderNetworkNodes(
-            WorldRenderContext context,
+    private static void renderNetworkLeaves(
             PoseStack matrices,
             Camera camera,
-            SimpleWiredNetwork network,
-            Map<Vec3i, Integer> positionCounts,
-            Map<Vec3i, List<Double>> finalOffsets
+            SimpleWiredNetwork network
     ) {
         Vec3 cameraPos = camera.getPosition();
         MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
-        RenderSystem.disableDepthTest();
 
-        VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_OVERLAY);
+        VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_TRIS);
 
         int color = network.getColor();
 
-        Map<Vec3i, Integer> seenPositions = new HashMap<>();
-
         for (PeripheralNode peripheral : network.getPeripherals()) {
-            Vec3i pos = peripheral.position();
-            Vec3 center = Vec3.atCenterOf(pos);
+            Vec3 from = Vec3.atCenterOf(peripheral.originPosition());
+            Vec3 to = Vec3.atCenterOf(peripheral.position());
+            Vec3 center = getLeafRenderPosition(from, to);
             Vec3 relative = center.subtract(cameraPos);
-            if (positionCounts.get(pos) > 1) {
-                int max = positionCounts.get(pos);
-                int cur = seenPositions.getOrDefault(pos, 0);
-                ++cur;
-
-                final double MAX_CONTAINMENT = 0.5d;
-                double offset = -MAX_CONTAINMENT / 2.0d
-                        + MAX_CONTAINMENT * (cur - 1.0d) / (max - 1.0d);
-                finalOffsets.computeIfAbsent(pos, (key) -> new ArrayList<>());
-                finalOffsets.get(pos).add(offset);
-
-                relative = new Vec3(relative.x, relative.y + offset, relative.z);
-            }
-            seenPositions.merge(pos, 1, Integer::sum);
-
 
             matrices.pushPose();
             matrices.translate(relative.x, relative.y, relative.z);
 
             matrices.scale(0.15f, 0.15f, 0.15f);
-            matrices.mulPose(Axis.YP.rotation(45.0f));
-            matrices.mulPose(Axis.XP.rotation(45.0f));
-            matrices.mulPose(Axis.ZP.rotation(45.0f));
 
-            overlayLeaf(consumer, matrices.last().pose(), color);
+            overlayLeaf(consumer, camera, matrices, color);
 
             matrices.popPose();
         }
+    }
+
+    private static void renderNetworkNodes(
+            PoseStack matrices,
+            Camera camera,
+            SimpleWiredNetwork network
+    ) {
+        Vec3 cameraPos = camera.getPosition();
+        MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
+
+        VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_OVERLAY);
+
+        int color = network.getColor();
 
         for (SimpleWiredNode node : network.getNodes()) {
             Vec3 center = Vec3.atCenterOf(node.position());
@@ -152,117 +133,102 @@ public class GoggleRenderer {
         buffer.endBatch(GoggleRenderTypes.GOGGLE_OVERLAY);
     }
 
+    private static void renderConnection(
+            VertexConsumer consumer,
+            Matrix4f pose,
+            Vec3 cameraPos,
+            Vec3 from,
+            Vec3 to,
+            int color
+    ) {
+        Vec3 start = from.subtract(cameraPos);
+        Vec3 end = to.subtract(cameraPos);
+
+        Vec3 direction = to.subtract(from).normalize();
+        Vec3 toCamera = cameraPos.subtract(from).normalize();
+        Vec3 side = direction.cross(toCamera).normalize();
+        side = side.scale(0.05);
+
+        Vec3 a = start.add(side);
+        Vec3 b = start.subtract(side);
+        Vec3 c = end.subtract(side);
+        Vec3 d = end.add(side);
+
+        consumer.vertex(pose, (float) a.x, (float) a.y, (float) a.z)
+                .color(color)
+                .endVertex();
+        consumer.vertex(pose, (float) b.x, (float) b.y, (float) b.z)
+                .color(color)
+                .endVertex();
+        consumer.vertex(pose, (float) c.x, (float) c.y, (float) c.z)
+                .color(color)
+                .endVertex();
+        consumer.vertex(pose, (float) d.x, (float) d.y, (float) d.z)
+                .color(color)
+                .endVertex();
+    }
+
+    private static final float LEAF_OFFSET = 0.25f;
+    private static Vec3 getLeafRenderPosition(
+            Vec3 from,
+            Vec3 to
+    ) {
+        Vec3 direction = from
+                .subtract(to)
+                .normalize();
+
+        Vec3 offset = direction.scale(LEAF_OFFSET);
+        return to.add(offset);
+    }
+
     private static void renderNetworkConnections(
-            WorldRenderContext context,
             PoseStack matrices,
             Camera camera,
-            SimpleWiredNetwork network,
-            Map<Vec3i, Integer> positionCounts,
-            Map<Vec3i, List<Double>> finalOffsets
+            SimpleWiredNetwork network
     ) {
         Vec3 cameraPos = camera.getPosition();
         MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
-        //RenderSystem.disableDepthTest();
 
         VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_OVERLAY);
         int color = network.getColor();
-        Map<Vec3i, Integer> seenPositions = new HashMap<>();
         List<SimpleWiredNode> nodes = network.getNodes();
         List<PeripheralNode> peripherals = network.getPeripherals();
 
+        Matrix4f pose = matrices.last().pose();
         for (NodeConnection connection : network.getConnections()) {
-            Vec3i fromO = nodes.get(connection.from()).position();
-            Vec3i toO = nodes.get(connection.to()).position();
-            Vec3 from = Vec3.atCenterOf(fromO);
-            Vec3 to = Vec3.atCenterOf(toO);
+            Vec3 from = Vec3.atCenterOf(nodes.get(connection.from()).position());
+            Vec3 to = Vec3.atCenterOf(nodes.get(connection.to()).position());
 
-            Vec3 start = from.subtract(cameraPos);
-            Vec3 end = to.subtract(cameraPos);
-
-            Vec3 direction = to.subtract(from).normalize();
-            Vec3 toCamera = cameraPos.subtract(from).normalize();
-            Vec3 side = direction.cross(toCamera).normalize();
-            side = side.scale(0.05);
-
-            Vec3 a = start.add(side);
-            Vec3 b = start.subtract(side);
-            Vec3 c = end.subtract(side);
-            Vec3 d = end.add(side);
-
-            Matrix4f pose = matrices.last().pose();
-
-            //Cc_tmp.LOGGER.info("RENDERING LINE {} TO {}", start, end);
-
-            consumer.vertex(pose, (float) a.x, (float) a.y, (float) a.z)
-                    .color(color)
-                    .endVertex();
-            consumer.vertex(pose, (float) b.x, (float) b.y, (float) b.z)
-                    .color(color)
-                    .endVertex();
-            consumer.vertex(pose, (float) c.x, (float) c.y, (float) c.z)
-                    .color(color)
-                    .endVertex();
-            consumer.vertex(pose, (float) d.x, (float) d.y, (float) d.z)
-                    .color(color)
-                    .endVertex();
+            renderConnection(
+                    consumer,
+                    pose,
+                    cameraPos,
+                    from,
+                    to,
+                    color
+            );
         }
 
         // Peripheral connections
+
         for (PeripheralConnection connection : network.getPeripheralConnections()) {
-            Vec3i fromO = nodes.get(connection.from()).position();
-            Vec3i toO = peripherals.get(connection.to()).position();
-            Vec3 from = Vec3.atCenterOf(fromO);
-            Vec3 to = Vec3.atCenterOf(toO);
+            Vec3 from = Vec3.atCenterOf(nodes.get(connection.from()).position());
+            Vec3 to = Vec3.atCenterOf(peripherals.get(connection.to()).position());
 
-            Vec3 start = from.subtract(cameraPos);
-            Vec3 end = to.subtract(cameraPos);
-            if (positionCounts.get(toO) > 1) {
-                int max = positionCounts.get(toO);
-                int cur = seenPositions.getOrDefault(toO, 0);
-                ++cur;
-
-                final double MAX_CONTAINMENT = 0.5d;
-                double offset = -MAX_CONTAINMENT / 2.0d
-                        + MAX_CONTAINMENT * (cur - 1.0d) / (max - 1.0d);
-                finalOffsets.computeIfAbsent(toO, (key) -> new ArrayList<>());
-                finalOffsets.get(toO).add(offset);
-
-                end = new Vec3(end.x, end.y + offset, end.z);
-            }
-            seenPositions.merge(toO, 1, Integer::sum);
-
-            Vec3 direction = to.subtract(from).normalize();
-            Vec3 toCamera = cameraPos.subtract(from).normalize();
-            Vec3 side = direction.cross(toCamera).normalize();
-            side = side.scale(0.05);
-
-            Vec3 a = start.add(side);
-            Vec3 b = start.subtract(side);
-            Vec3 c = end.subtract(side);
-            Vec3 d = end.add(side);
-
-            Matrix4f pose = matrices.last().pose();
-
-            //Cc_tmp.LOGGER.info("RENDERING PERIPHERAL LINE {} TO {}", start, end);
-
-            consumer.vertex(pose, (float) a.x, (float) a.y, (float) a.z)
-                    .color(color)
-                    .endVertex();
-            consumer.vertex(pose, (float) b.x, (float) b.y, (float) b.z)
-                    .color(color)
-                    .endVertex();
-            consumer.vertex(pose, (float) c.x, (float) c.y, (float) c.z)
-                    .color(color)
-                    .endVertex();
-            consumer.vertex(pose, (float) d.x, (float) d.y, (float) d.z)
-                    .color(color)
-                    .endVertex();
+            renderConnection(
+                    consumer,
+                    pose,
+                    cameraPos,
+                    from,
+                    getLeafRenderPosition(from, to),
+                    color
+            );
         }
 
         buffer.endBatch(GoggleRenderTypes.GOGGLE_OVERLAY);
     }
 
-    private static void renderNetworkNametags(WorldRenderContext context, PoseStack matrices, Camera camera, SimpleWiredNetwork network, Map<Vec3i, Integer> positionCounts) {
+    private static void renderNetworkNametags(PoseStack matrices, Camera camera, SimpleWiredNetwork network) {
 
     }
 
@@ -348,6 +314,9 @@ public class GoggleRenderer {
 
     // Generates an overlay of a node (block shaped) at the current position.
     private static void overlayNode(VertexConsumer consumer, Matrix4f pose, int color) {
+        // No way do I have these vertices correctly ordered, so I just disabled culling.
+        // :)
+
         // Top face (1Y)
         consumer.vertex(pose, -0.5f,  0.5f, -0.5f)
                 .color(color)
@@ -433,10 +402,58 @@ public class GoggleRenderer {
                 .endVertex();
     }
 
-    // Generates an overlay of a leaf node (circle-shaped) at the current position.
-    private static void overlayLeaf(VertexConsumer consumer, Matrix4f pose, int color) {
+    private static void renderCircle(
+            VertexConsumer consumer,
+            Matrix4f pose,
+            int color,
+            int segments,
+            float radius
+    ) {
+        for (int i = 0; i < segments; i++) {
+            double a1 = 2.0 * Math.PI * i / segments;
+            double a2 = 2.0 * Math.PI * (i + 1) / segments;
+
+            float x1 = (float) (Math.cos(a1) * radius);
+            float y1 = (float) (Math.sin(a1) * radius);
+
+            float x2 = (float) (Math.cos(a2) * radius);
+            float y2 = (float) (Math.sin(a2) * radius);
+
+            // Triangle
+            consumer.vertex(pose, 0, 0, 0)
+                    .color(color)
+                    .endVertex();
+
+            consumer.vertex(pose, x1, y1, 0)
+                    .color(color)
+                    .endVertex();
+
+            consumer.vertex(pose, x2, y2, 0)
+                    .color(color)
+                    .endVertex();
+        }
+    }
+
+    // Generates an overlay of a leaf node (circle-shaped with smaller circle) at the current position.
+    private static void overlayLeaf(VertexConsumer consumer, Camera camera, PoseStack matrices, int color) {
         // Nothing right now. Will eventually render a circle or something.
-        overlayNode(consumer, pose, color);
+        //overlayNode(consumer, pose, color);
+
+        matrices.pushPose();
+        matrices.mulPose(camera.rotation());
+        Matrix4f pose = matrices.last().pose();
+
+        final int segments = 32;
+        float radius = 0.5f;
+
+        renderCircle(consumer, pose, color, segments, radius);
+
+        // Render a smaller circle on top.
+        final int white = 0xffffffff;
+        radius /= 2.0f;
+        renderCircle(consumer, pose, white, segments, radius);
+
+        matrices.popPose();
     }
 
     // Connects two nodes on a network with a quad-line.

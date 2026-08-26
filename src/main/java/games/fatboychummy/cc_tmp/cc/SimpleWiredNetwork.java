@@ -138,21 +138,23 @@ public class SimpleWiredNetwork {
             int i = 0;
             for (WiredNode node : nodes) {
                 WiredElement element = node.getElement();
+                Vec3 elementPos = element.getPosition();
+                Vec3i pos = new Vec3i(round(elementPos.x), round(elementPos.y), round(elementPos.z));
                 ArrayList<PeripheralNode> nodePeripherals = new ArrayList<>();
                 Map<String, IPeripheral> peripherals = ((WiredNodeImplAccessor) node).getPeripherals();
 
                 for (Map.Entry<String, IPeripheral> entry : peripherals.entrySet()) {
-                    nodePeripherals.add(PeripheralNode.fromIPeripheral(entry.getKey(), entry.getValue()));
+                    nodePeripherals.add(PeripheralNode.fromIPeripheral(entry.getKey(), entry.getValue(), pos));
                 }
 
-                Vec3 elementPos = element.getPosition();
+
 
                 nodesList.add(
                         new SimpleWiredNode(
                                 new Vec3i(
-                                        SimpleWiredNetwork.round(elementPos.x()),
-                                        SimpleWiredNetwork.round(elementPos.y()),
-                                        SimpleWiredNetwork.round(elementPos.z())
+                                        round(elementPos.x()),
+                                        round(elementPos.y()),
+                                        round(elementPos.z())
                                 ),
                                 nodePeripherals
                         )
