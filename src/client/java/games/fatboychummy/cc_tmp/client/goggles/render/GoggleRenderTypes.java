@@ -8,7 +8,7 @@ import net.minecraft.client.renderer.RenderType;
 
 
 public class GoggleRenderTypes {
-    public static final RenderType GOGGLE_OVERLAY = new GoggleRenderType(
+    public static final RenderType GOGGLE_QUADS = new GoggleRenderType(
             "goggle_overlay",
             DefaultVertexFormat.POSITION_COLOR,
             VertexFormat.Mode.QUADS,

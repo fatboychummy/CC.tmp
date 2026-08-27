@@ -1,18 +1,15 @@
 package games.fatboychummy.cc_tmp.client.goggles.render;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
-import com.mojang.math.Axis;
 import games.fatboychummy.cc_tmp.Cc_tmp;
 import games.fatboychummy.cc_tmp.cc.*;
+import games.fatboychummy.cc_tmp.packet.GoggleNetworkPacket;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Vec3i;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -28,9 +25,63 @@ public class GoggleRenderer {
         client = Minecraft.getInstance();
     }
 
+    public static int getNodeCount() {
+        return nodeCount;
+    }
+    public static int getLeafCount() {
+        return leafCount;
+    }
+    public static int getLineCount() {
+        return lineCount;
+    }
+    public static int getNetworkCount() {
+        return networks.size();
+    }
+
+    private static int nodeCount = 0;
+    private static int leafCount = 0;
+    private static int lineCount = 0;
+    private static boolean dirty = false;
+
+    private static void setupNetworks() {
+        if (!dirty) return;
+
+        nodeCount = 0;
+        leafCount = 0;
+        lineCount = 0;
+
+        List<Integer> usedColors = new ArrayList<>();
+
+        // Collection pass
+        for (SimpleWiredNetwork network : networks) {
+            nodeCount += network.getNodes().size();
+            leafCount += network.getPeripherals().size();
+            lineCount += network.getConnections().size();
+            lineCount += network.getPeripheralConnections().size();
+
+            int color = network.getColor();
+            if (color == GoggleNetworkPacket.COLOR_NOT_INIT) continue;
+
+            usedColors.add(color);
+        }
+
+        // Init pass
+        for (SimpleWiredNetwork network : networks) {
+            if (network.getColor() != GoggleNetworkPacket.COLOR_NOT_INIT) continue;
+
+            int color = NetworkColorAssigner.getNextColor(usedColors);
+            usedColors.add(color);
+            network.setColor(color);
+        }
+
+        dirty = false;
+    }
+
     private static void renderGoggles(WorldRenderContext context) {
         PoseStack matrices = context.matrixStack();
         Camera camera = context.camera();
+
+        setupNetworks();
 
         if (camera == null) return;
 
@@ -41,6 +92,7 @@ public class GoggleRenderer {
 
     public static void addNetwork(SimpleWiredNetwork network) {
         networks.add(network);
+        dirty = true;
     }
 
     private static void renderLookedAtPeripheral(WorldRenderContext context, PoseStack matrices, Camera camera) {
@@ -82,9 +134,7 @@ public class GoggleRenderer {
     ) {
         Vec3 cameraPos = camera.getPosition();
         MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
-
         VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_TRIS);
-
         int color = network.getColor();
 
         for (PeripheralNode peripheral : network.getPeripherals()) {
@@ -102,6 +152,8 @@ public class GoggleRenderer {
 
             matrices.popPose();
         }
+
+        buffer.endBatch(GoggleRenderTypes.GOGGLE_TRIS);
     }
 
     private static void renderNetworkNodes(
@@ -111,9 +163,7 @@ public class GoggleRenderer {
     ) {
         Vec3 cameraPos = camera.getPosition();
         MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
-
-        VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_OVERLAY);
-
+        VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_QUADS);
         int color = network.getColor();
 
         for (SimpleWiredNode node : network.getNodes()) {
@@ -123,14 +173,14 @@ public class GoggleRenderer {
             matrices.pushPose();
             matrices.translate(relative.x, relative.y, relative.z);
 
-            matrices.scale(0.15f, 0.15f, 0.15f);
+            matrices.scale(0.10f, 0.10f, 0.10f);
 
             overlayNode(consumer, matrices.last().pose(), color);
 
             matrices.popPose();
         }
 
-        buffer.endBatch(GoggleRenderTypes.GOGGLE_OVERLAY);
+        buffer.endBatch(GoggleRenderTypes.GOGGLE_QUADS);
     }
 
     private static void renderConnection(
@@ -189,7 +239,7 @@ public class GoggleRenderer {
         Vec3 cameraPos = camera.getPosition();
         MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
 
-        VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_OVERLAY);
+        VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_QUADS);
         int color = network.getColor();
         List<SimpleWiredNode> nodes = network.getNodes();
         List<PeripheralNode> peripherals = network.getPeripherals();
@@ -225,92 +275,12 @@ public class GoggleRenderer {
             );
         }
 
-        buffer.endBatch(GoggleRenderTypes.GOGGLE_OVERLAY);
+        buffer.endBatch(GoggleRenderTypes.GOGGLE_QUADS);
     }
 
     private static void renderNetworkNametags(PoseStack matrices, Camera camera, SimpleWiredNetwork network) {
 
     }
-
-    // TODO: Needs to be dual pass, one pass renders the overlays, the other renders the labels.
-    /*
-    private static void renderOtherPeripherals(WorldRenderContext context, PoseStack matrices, Camera camera) {
-        assert !dataList.isEmpty();
-        Vec3 cameraPos = camera.getPosition();
-
-        MultiBufferSource.BufferSource buffer =
-                Minecraft.getInstance().renderBuffers().bufferSource();
-
-        //MultiBufferSource.BufferSource buffer = MultiBufferSource.immediate(new BufferBuilder(256));
-
-        RenderSystem.disableDepthTest();
-
-        try {
-            for (GogglePeripheralData peripheral : dataList) {
-                Vec3 center = Vec3.atCenterOf(peripheral.pos());
-                Vec3 relative = center.subtract(cameraPos);
-
-                // Opacity level based on the FADE_START_DISTANCE and FADE_END_DISTANCE.
-                float distance = (float) Math.sqrt(relative.lengthSqr());
-
-                float fade = Mth.clamp(
-                        (distance - FADE_START_DISTANCE)
-                                / (FADE_END_DISTANCE - FADE_START_DISTANCE),
-                        0.0f,
-                        1.0f
-                );
-                float alpha = 1.0f - fade;
-
-                if (alpha < 0.05f) {
-                    continue;
-                }
-                alpha = Mth.clamp(alpha, 0.0f, 1.0f);
-
-                int alphaByte = (int) (alpha * 255.0f);
-                int color = (alphaByte << 24) | 0xd5d5d5;
-
-                matrices.pushPose();
-                matrices.translate(relative.x, relative.y, relative.z);
-                overlayNode(context, matrices, buffer, new WiredNetwork()); // TODO: Update this temporary code
-                buffer.endBatch(GoggleRenderTypes.GOGGLE_OVERLAY);
-
-                matrices.translate(0.0f, 0.7f, 0.0f);
-
-                // Render the label
-
-                // Rotate towards camera.
-                matrices.mulPose(camera.rotation());
-
-                // Become smol
-                float scale = 0.015f; // To be changed to a config?
-                matrices.scale(-scale, -scale, scale);
-
-
-                Component text = Component.literal(peripheral.name());
-                client.font.drawInBatch(
-                        text,
-                        -client.font.width(text) / 2.0f,
-                        0,
-                        color,
-                        false,
-                        matrices.last().pose(),
-                        buffer,
-                        Font.DisplayMode.SEE_THROUGH,
-                        0x0,
-                        0xF000F0
-                );
-                matrices.popPose();
-            }
-
-            buffer.endBatch();
-            //buffer.endBatch(GoggleRenderTypes.GOGGLE_OVERLAY);
-            //buffer.endLastBatch();
-        } finally {
-            //buffer.endBatch();
-            RenderSystem.enableDepthTest();
-        }
-    }
-     */
 
     // Generates an overlay of a node (block shaped) at the current position.
     private static void overlayNode(VertexConsumer consumer, Matrix4f pose, int color) {
@@ -402,16 +372,16 @@ public class GoggleRenderer {
                 .endVertex();
     }
 
+    private static final int SEGMENTS = 4;
     private static void renderCircle(
             VertexConsumer consumer,
             Matrix4f pose,
             int color,
-            int segments,
             float radius
     ) {
-        for (int i = 0; i < segments; i++) {
-            double a1 = 2.0 * Math.PI * i / segments;
-            double a2 = 2.0 * Math.PI * (i + 1) / segments;
+        for (int i = 0; i < SEGMENTS; i++) {
+            double a1 = 2.0 * Math.PI * i / SEGMENTS;
+            double a2 = 2.0 * Math.PI * (i + 1) / SEGMENTS;
 
             float x1 = (float) (Math.cos(a1) * radius);
             float y1 = (float) (Math.sin(a1) * radius);
@@ -434,6 +404,8 @@ public class GoggleRenderer {
         }
     }
 
+
+    private static final int white = NetworkColorAssigner.Color.WHITE.withAlpha(0xff);
     // Generates an overlay of a leaf node (circle-shaped with smaller circle) at the current position.
     private static void overlayLeaf(VertexConsumer consumer, Camera camera, PoseStack matrices, int color) {
         // Nothing right now. Will eventually render a circle or something.
@@ -443,21 +415,13 @@ public class GoggleRenderer {
         matrices.mulPose(camera.rotation());
         Matrix4f pose = matrices.last().pose();
 
-        final int segments = 32;
-        float radius = 0.5f;
-
-        renderCircle(consumer, pose, color, segments, radius);
+        renderCircle(consumer, pose, color, 1.0f);
 
         // Render a smaller circle on top.
-        final int white = 0xffffffff;
-        radius /= 2.0f;
-        renderCircle(consumer, pose, white, segments, radius);
+        renderCircle(consumer, pose, white, 0.5f);
 
         matrices.popPose();
     }
-
-    // Connects two nodes on a network with a quad-line.
-    private static void connectNodes(WorldRenderContext context, PoseStack matrices, MultiBufferSource buffer, SimpleWiredNetwork network, BlockPos pos1, BlockPos pos2) {}
 
     // Draws the nametag overlay for a networked block.
     private static void overlayName(WorldRenderContext context, PoseStack matrices, MultiBufferSource buffer, SimpleWiredNetwork network, BlockPos pos) {}

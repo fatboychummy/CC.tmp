@@ -4,7 +4,6 @@ import dan200.computercraft.api.network.wired.WiredNode;
 import games.fatboychummy.cc_tmp.cc.*;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.core.Vec3i;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -14,6 +13,8 @@ import java.util.List;
 public class GoggleNetworkPacket {
     private final ServerPlayer player;
     private final SimpleWiredNetwork network;
+
+    public static final int COLOR_NOT_INIT = 0xff000000;
 
     public GoggleNetworkPacket(ServerPlayer player, WiredNode node) {
         this.player = player;
@@ -25,7 +26,7 @@ public class GoggleNetworkPacket {
 
     public static SimpleWiredNetwork receive(FriendlyByteBuf buf) {
         String dimension = PacketHelper.readString(buf);
-        SimpleWiredNetwork network = new SimpleWiredNetwork(0x5500ff00, dimension);
+        SimpleWiredNetwork network = new SimpleWiredNetwork(COLOR_NOT_INIT, dimension);
 
         int nodeCount = buf.readInt();
         int peripheralCount = buf.readInt();

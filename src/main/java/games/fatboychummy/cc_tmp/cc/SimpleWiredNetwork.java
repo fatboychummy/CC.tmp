@@ -14,7 +14,7 @@ import java.util.*;import java.util.concurrent.locks.ReadWriteLock;
 // Contains all the data required to represent a single wired network. This data is broadcast by the server.
 public class SimpleWiredNetwork {
     // A (hopefully unique) colour to display the network as.
-    private final int color;
+    private int color;
     private final List<SimpleWiredNode> nodes = new ArrayList<>();
     private final List<NodeConnection> connections = new ArrayList<>();
     private final List<PeripheralNode> peripherals = new ArrayList<>();
@@ -60,6 +60,9 @@ public class SimpleWiredNetwork {
         return peripheralConnections;
     }
 
+    public void setColor(int color) {
+        this.color = color;
+    }
     public final int getColor() {
         return color;
     }
@@ -187,7 +190,7 @@ public class SimpleWiredNetwork {
 
 
         // Final setup: Create the network object.
-        SimpleWiredNetwork sNetwork = new SimpleWiredNetwork(0x5500ff00, dimension);
+        SimpleWiredNetwork sNetwork = new SimpleWiredNetwork(0x55ff0000, dimension);
 
         for (SimpleWiredNode node : nodesList) {
             sNetwork.addNode(node);
