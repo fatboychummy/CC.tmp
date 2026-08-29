@@ -1,16 +1,19 @@
 package games.fatboychummy.cc_tmp.client.goggles.render;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
-import games.fatboychummy.cc_tmp.Cc_tmp;
 import games.fatboychummy.cc_tmp.cc.*;
 import games.fatboychummy.cc_tmp.packet.GoggleNetworkPacket;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -19,10 +22,42 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class GoggleRenderer {
+    static Minecraft client;
+
+    // The data of all nearby networks, sent by the server.
+    private static final List<SimpleWiredNetwork> networks = new CopyOnWriteArrayList<>();
+
+    // The data of the currently looked-at object.
+    private static @Nullable GogglePeripheralData data;
+
+    private static int nodeCount = 0;
+    private static int leafCount = 0;
+    private static int lineCount = 0;
+    private static boolean dirty = false;
+
+    private static final float FADE_START_DISTANCE = 32.0f;
+    private static final float FADE_END_DISTANCE = 64.0f;
+    private static final float NAMETAG_FADE_START_DISTANCE = 8.0f; // Nametags become essentially unreadable much faster than network topography.
+    private static final float NAMETAG_FADE_END_DISTANCE = 16.0f; // Nametags become essentially unreadable much faster than network topography.
+
+    private static final int BASE_ALPHA = 0x55;
+    private static final int BASE_NAMETAG_ALPHA = 0xff;
+
+    private static final ResourceLocation FONT_TEXTURE =
+            new ResourceLocation("minecraft", "textures/font/ascii.png");
+
+
     public static void init() {
         WorldRenderEvents.LAST.register(GoggleRenderer::renderGoggles);
         data = null;
         client = Minecraft.getInstance();
+
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            networks.clear();
+        });
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            networks.clear();
+        });
     }
 
     public static int getNodeCount() {
@@ -38,10 +73,29 @@ public class GoggleRenderer {
         return networks.size();
     }
 
-    private static int nodeCount = 0;
-    private static int leafCount = 0;
-    private static int lineCount = 0;
-    private static boolean dirty = false;
+    // TODO: Alpha base 0x55, based on FADE_DISTANCE from 0x00 to 0x55.
+
+    // This method assumes the input colour has no alpha value!
+    private static int alphaFadeNodes(int baseColor, float dist) {
+        float alpha = 1.0f - Mth.clamp(
+                (dist - FADE_START_DISTANCE) / (FADE_END_DISTANCE - FADE_START_DISTANCE),
+                0.1f,
+                1.0f
+        );
+
+        return ((int) (BASE_ALPHA * alpha)) << 24 | baseColor;
+    }
+
+    // This method assumes the input colour has no alpha value!
+    private static int alphaFadeNames(int baseColor, float dist) {
+        float alpha = 1.0f - Mth.clamp(
+                (dist - NAMETAG_FADE_START_DISTANCE) / (NAMETAG_FADE_END_DISTANCE - NAMETAG_FADE_START_DISTANCE),
+                0.0f,
+                1.0f
+        );
+
+        return Mth.clamp((int) (BASE_NAMETAG_ALPHA * alpha), 4, 255) << 24 | baseColor;
+    }
 
     private static void setupNetworks() {
         if (!dirty) return;
@@ -142,13 +196,20 @@ public class GoggleRenderer {
             Vec3 to = Vec3.atCenterOf(peripheral.position());
             Vec3 center = getLeafRenderPosition(from, to);
             Vec3 relative = center.subtract(cameraPos);
+            float dist = (float) cameraPos.distanceTo(center);
 
             matrices.pushPose();
             matrices.translate(relative.x, relative.y, relative.z);
 
             matrices.scale(0.15f, 0.15f, 0.15f);
 
-            overlayLeaf(consumer, camera, matrices, color);
+            if (dist < FADE_END_DISTANCE)
+                overlayLeaf(
+                        consumer,
+                        camera,
+                        matrices,
+                        alphaFadeNodes(color, dist)
+                );
 
             matrices.popPose();
         }
@@ -169,13 +230,19 @@ public class GoggleRenderer {
         for (SimpleWiredNode node : network.getNodes()) {
             Vec3 center = Vec3.atCenterOf(node.position());
             Vec3 relative = center.subtract(cameraPos);
+            float dist = (float) relative.length();
 
             matrices.pushPose();
             matrices.translate(relative.x, relative.y, relative.z);
 
             matrices.scale(0.10f, 0.10f, 0.10f);
 
-            overlayNode(consumer, matrices.last().pose(), color);
+            if (dist < FADE_END_DISTANCE)
+                overlayNode(
+                        consumer,
+                        matrices.last().pose(),
+                        alphaFadeNodes(color, dist)
+                );
 
             matrices.popPose();
         }
@@ -248,15 +315,17 @@ public class GoggleRenderer {
         for (NodeConnection connection : network.getConnections()) {
             Vec3 from = Vec3.atCenterOf(nodes.get(connection.from()).position());
             Vec3 to = Vec3.atCenterOf(nodes.get(connection.to()).position());
+            float dist = (float) cameraPos.distanceTo(from); // We just use the origin position here.
 
-            renderConnection(
-                    consumer,
-                    pose,
-                    cameraPos,
-                    from,
-                    to,
-                    color
-            );
+            if (dist < FADE_END_DISTANCE)
+                renderConnection(
+                        consumer,
+                        pose,
+                        cameraPos,
+                        from,
+                        to,
+                        alphaFadeNodes(color, dist)
+                );
         }
 
         // Peripheral connections
@@ -265,21 +334,20 @@ public class GoggleRenderer {
             Vec3 from = Vec3.atCenterOf(nodes.get(connection.from()).position());
             Vec3 to = Vec3.atCenterOf(peripherals.get(connection.to()).position());
 
-            renderConnection(
-                    consumer,
-                    pose,
-                    cameraPos,
-                    from,
-                    getLeafRenderPosition(from, to),
-                    color
-            );
+            float dist = (float) cameraPos.distanceTo(from); // We just use the origin position here.
+
+            if (dist < FADE_END_DISTANCE)
+                renderConnection(
+                        consumer,
+                        pose,
+                        cameraPos,
+                        from,
+                        getLeafRenderPosition(from, to),
+                        alphaFadeNodes(color, dist)
+                );
         }
 
         buffer.endBatch(GoggleRenderTypes.GOGGLE_QUADS);
-    }
-
-    private static void renderNetworkNametags(PoseStack matrices, Camera camera, SimpleWiredNetwork network) {
-
     }
 
     // Generates an overlay of a node (block shaped) at the current position.
@@ -405,7 +473,7 @@ public class GoggleRenderer {
     }
 
 
-    private static final int white = NetworkColorAssigner.Color.WHITE.withAlpha(0xff);
+    private static final int white = NetworkColorAssigner.Color.WHITE.getValue();
     // Generates an overlay of a leaf node (circle-shaped with smaller circle) at the current position.
     private static void overlayLeaf(VertexConsumer consumer, Camera camera, PoseStack matrices, int color) {
         // Nothing right now. Will eventually render a circle or something.
@@ -418,25 +486,62 @@ public class GoggleRenderer {
         renderCircle(consumer, pose, color, 1.0f);
 
         // Render a smaller circle on top.
-        renderCircle(consumer, pose, white, 0.5f);
+        renderCircle(consumer, pose, (color & 0xff000000) | white, 0.5f);
 
         matrices.popPose();
     }
 
+
+    private static void renderNetworkNametags(PoseStack matrices, Camera camera, SimpleWiredNetwork network) {
+        Vec3 cameraPos = camera.getPosition();
+        int color = network.getColor();
+        MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
+        RenderSystem.disableDepthTest();
+
+        for (PeripheralNode peripheralNode : network.getPeripherals()) {
+            Vec3 center = Vec3.atCenterOf(peripheralNode.position());
+            Vec3 relative = center.subtract(cameraPos);
+
+            matrices.pushPose();
+
+            matrices.translate(relative.x, relative.y + 0.6d, relative.z);
+
+            // Face camera
+            matrices.mulPose(camera.rotation());
+
+            // Text rendering scale
+            matrices.scale(-0.025f, -0.025f, 0.025f);
+
+            String text = peripheralNode.name();
+            float width = client.font.width(text);
+            float dist = (float) relative.length();
+
+            if (dist < NAMETAG_FADE_END_DISTANCE)
+                client.font.drawInBatch(
+                        text,
+                        -width / 2.0f,
+                        0,
+                        alphaFadeNames(color, dist),
+                        false,
+                        matrices.last().pose(),
+                        buffer,
+                        Font.DisplayMode.SEE_THROUGH,
+                        0,
+                        LightTexture.FULL_BRIGHT
+                );
+
+            matrices.popPose();
+        }
+
+        buffer.endBatch();
+
+        RenderSystem.enableDepthTest();
+    }
+
     // Draws the nametag overlay for a networked block.
-    private static void overlayName(WorldRenderContext context, PoseStack matrices, MultiBufferSource buffer, SimpleWiredNetwork network, BlockPos pos) {}
+    private static void overlayNameTag(VertexConsumer consumer, Camera camera, PoseStack matrices, int color) {
 
-    static Minecraft client;
+    }
 
-    // The data of all nearby networks, sent by the server.
-    private static final List<SimpleWiredNetwork> networks = new CopyOnWriteArrayList<>();
 
-    // The data of the currently looked-at object.
-    private static @Nullable GogglePeripheralData data;
-
-    private static final float FADE_START_DISTANCE = 10.0f;
-    private static final float FADE_END_DISTANCE = 15.0f;
-
-    private static final ResourceLocation FONT_TEXTURE =
-            new ResourceLocation("minecraft", "textures/font/ascii.png");
 }

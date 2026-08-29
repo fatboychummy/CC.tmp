@@ -6,22 +6,21 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 public class NetworkColorAssigner {
-    public static final int ALPHA = 0x55;
-
     public static int getNextColor(List<Integer> usedColors) {
         List<Color> availableColors = Color.getColors();
-        availableColors.removeIf(color -> usedColors.contains(color.withAlpha(ALPHA)));
+        availableColors.removeIf(color -> usedColors.contains(color.value));
 
         if (availableColors.isEmpty()) {
             // Reset it, just start from the beginning again.
             // FIXME: Every single call after the "buffer" is full will completely reset to a full list
-            // If there are two greens and one of each color, green can be picked a third time!
+            // If there are two greens but only one of every other color, green can be picked a third time!
+            // We should probably keep some kind of instanced state in GoggleRenderer for both speed and so we can fix this.
             availableColors = Color.getColors();
         }
 
         return availableColors.get(
                 ThreadLocalRandom.current().nextInt(0, availableColors.size())
-        ).withAlpha(ALPHA);
+        ).value;
     }
 
     public static enum Color {
