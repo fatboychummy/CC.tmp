@@ -31,10 +31,10 @@ public class GoggleRenderTypes {
             }
     );
 
-    public static final RenderType GOGGLE_LINES = new GoggleRenderType(
-            "goggle_lines",
+    public static final RenderType GOGGLE_TRIS = new GoggleRenderType(
+            "goggle_tris",
             DefaultVertexFormat.POSITION_COLOR,
-            VertexFormat.Mode.LINES,
+            VertexFormat.Mode.TRIANGLES,
             256,
             false,
             false,
@@ -54,8 +54,8 @@ public class GoggleRenderTypes {
             }
     );
 
-    public static final RenderType GOGGLE_TRIS = new GoggleRenderType(
-            "goggle_lines",
+    public static final RenderType GOGGLE_TRI_DT = new GoggleRenderType(
+            "goggle_tris",
             DefaultVertexFormat.POSITION_COLOR,
             VertexFormat.Mode.TRIANGLES,
             256,
@@ -65,7 +65,7 @@ public class GoggleRenderTypes {
                 RenderSystem.enableBlend();
                 RenderSystem.defaultBlendFunc();
 
-                RenderSystem.disableDepthTest();
+                RenderSystem.enableDepthTest();
                 RenderSystem.disableCull();
 
                 RenderSystem.setShader(GameRenderer::getPositionColorShader);
@@ -73,7 +73,7 @@ public class GoggleRenderTypes {
             () -> {
                 RenderSystem.disableBlend();
                 RenderSystem.enableCull();
-                RenderSystem.enableDepthTest();
+                RenderSystem.disableDepthTest();
             }
     );
 

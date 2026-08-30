@@ -21,10 +21,19 @@ public class SimpleWiredNetwork {
     private final List<PeripheralConnection> peripheralConnections = new ArrayList<>();
     private final Map<Integer, Integer> connectionMap = new HashMap<>();
     private final String dimension;
+    private boolean displayed = false;
 
     public SimpleWiredNetwork(int color, String dimension) {
         this.color = color;
         this.dimension = dimension;
+    }
+
+    public boolean isDisplayed() {
+        return displayed;
+    }
+
+    public void setDisplayed(boolean displayed) {
+        this.displayed = displayed;
     }
 
     public void addNode(SimpleWiredNode node) {
@@ -69,6 +78,32 @@ public class SimpleWiredNetwork {
 
     public final String getDimension() {
         return dimension;
+    }
+
+
+    public final Vec3 getCentroid() {
+        double avgX = 0,
+                avgY = 0,
+                avgZ = 0;
+
+        for (SimpleWiredNode node : nodes) {
+            Vec3i pos = node.position();
+            avgX += pos.getX();
+            avgY += pos.getY();
+            avgZ += pos.getZ();
+        }
+
+        int size = nodes.size();
+        avgX /= size;
+        avgY /= size;
+        avgZ /= size;
+
+
+        return new Vec3(
+                avgX,
+                avgY,
+                avgZ
+        );
     }
 
     public final @NotNull String toString() {

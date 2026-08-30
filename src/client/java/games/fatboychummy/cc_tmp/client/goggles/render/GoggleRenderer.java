@@ -3,10 +3,13 @@ package games.fatboychummy.cc_tmp.client.goggles.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.*;
 import games.fatboychummy.cc_tmp.cc.*;
+import games.fatboychummy.cc_tmp.item.tmpItems;
 import games.fatboychummy.cc_tmp.packet.GoggleNetworkPacket;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -14,6 +17,11 @@ import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -43,12 +51,22 @@ public class GoggleRenderer {
     private static final int BASE_ALPHA = 0x55;
     private static final int BASE_NAMETAG_ALPHA = 0xff;
 
+    private static final float PING_SPEED = 30.0f; // Radius expansion in blocks, per second.
+    private static final float PING_DECEL = 8.5f; // Rate at which above decreases per second.
+    private static final float PING_MIN_SPEED = 5.0f; // Minimum ping speed.
+    private static float currentPingSpeed = 0.0f;
+    private static long lastPingUpdate = 0L;
+    private static boolean pinging = false;
+    private static @Nullable Vec3 pingOrigin;
+    private static float pingSize = 0.0f;
+
     private static final ResourceLocation FONT_TEXTURE =
             new ResourceLocation("minecraft", "textures/font/ascii.png");
 
 
     public static void init() {
         WorldRenderEvents.LAST.register(GoggleRenderer::renderGoggles);
+        WorldRenderEvents.LAST.register(GoggleRenderer::animatePing);
         data = null;
         client = Minecraft.getInstance();
 
@@ -58,6 +76,42 @@ public class GoggleRenderer {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             networks.clear();
         });
+
+        ClientTickEvents.END_CLIENT_TICK.register(GoggleRenderer::tick);
+
+        UseItemCallback.EVENT.register(GoggleRenderer::useGoggle);
+    }
+
+    private static InteractionResultHolder<ItemStack> useGoggle(Player player, Level level, InteractionHand hand) {
+        boolean usingGoggles = false;
+        if (hand.equals(InteractionHand.MAIN_HAND)) {
+            usingGoggles = player.getMainHandItem().is(tmpItems.PERIPHERAL_GOGGLES);
+        } else {
+            usingGoggles = player.getOffhandItem().is(tmpItems.PERIPHERAL_GOGGLES);
+        }
+
+        if (usingGoggles) {
+            startAnimatePing(player.position());
+        }
+
+        return InteractionResultHolder.pass(player.getMainHandItem());
+    }
+
+
+    private static void tick(Minecraft client) {
+        if (!pinging) return;
+
+        for (SimpleWiredNetwork network : networks) {
+            if (network.isDisplayed()) continue;
+
+            if (network.getCentroid().closerThan(pingOrigin, pingSize)) {
+                network.setDisplayed(true);
+            }
+        }
+
+        if (pingSize > FADE_END_DISTANCE) {
+            pinging = false;
+        }
     }
 
     public static int getNodeCount() {
@@ -73,7 +127,208 @@ public class GoggleRenderer {
         return networks.size();
     }
 
-    // TODO: Alpha base 0x55, based on FADE_DISTANCE from 0x00 to 0x55.
+    /**
+     * Attempts to start a new ping animation.
+     * @param origin The origin point of the ping.
+     * @return Whether it was able to start a new ping animation.
+     */
+    public static boolean startAnimatePing(Vec3 origin) {
+        if (pinging) return false;
+
+        // Immediately hide any networks that are visible.
+        for (SimpleWiredNetwork network : networks) {
+            network.setDisplayed(false);
+        }
+
+        lastPingUpdate = System.nanoTime();
+        currentPingSpeed = PING_SPEED;
+        pingOrigin = origin;
+        pingSize = 0.1f;
+        pinging = true;
+        return true;
+    }
+
+    private static final int CIRCLE_COUNT = 7;
+    private static void animatePing(WorldRenderContext context) {
+        if (!pinging) return;
+        long now = System.nanoTime();
+        float delta = (now - lastPingUpdate) / 1_000_000_000.0f;
+        lastPingUpdate = now;
+        pingSize += currentPingSpeed * delta;
+        currentPingSpeed = Math.max(currentPingSpeed - PING_DECEL * delta, PING_MIN_SPEED);
+
+        MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
+        VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_TRI_DT);
+
+        Vec3 cameraPos = context.camera().getPosition();
+        Vec3 relative = pingOrigin.subtract(cameraPos);
+        PoseStack matrices = context.matrixStack();
+        matrices.pushPose();
+
+        matrices.translate(relative.x, relative.y, relative.z);
+        int color = alphaFadeNodes(0xaaaaaa, pingSize);
+
+
+        float spacing = pingSize / (CIRCLE_COUNT + 0.15f);
+        for (int i = -CIRCLE_COUNT; i <= CIRCLE_COUNT; i++) {
+            float offset = i * spacing;
+            float ringRadius = Mth.sqrt(
+                    pingSize * pingSize - offset * offset
+            );
+
+            // XZ
+            matrices.pushPose();
+            matrices.translate(0.0f, offset, 0.0f);
+
+            renderCircle(
+                    consumer,
+                    matrices.last().pose(),
+                    ringRadius,
+                    0.25f,
+                    64,
+                    color,
+                    CirclePlane.XZ
+            );
+            matrices.popPose();
+
+            // XY
+            matrices.pushPose();
+            matrices.translate(0.0f, 0.0f, offset);
+
+            renderCircle(
+                    consumer,
+                    matrices.last().pose(),
+                    ringRadius,
+                    0.25f,
+                    64,
+                    color,
+                    CirclePlane.XY
+            );
+            matrices.popPose();
+
+            // YZ
+            matrices.pushPose();
+            matrices.translate(offset, 0.0f, 0.0f);
+
+            renderCircle(
+                    consumer,
+                    matrices.last().pose(),
+                    ringRadius,
+                    0.25f,
+                    64,
+                    color,
+                    CirclePlane.YZ
+            );
+            matrices.popPose();
+        }
+
+        matrices.popPose();
+
+        buffer.endBatch(GoggleRenderTypes.GOGGLE_TRI_DT);
+    }
+
+    private enum CirclePlane {
+        XY,
+        XZ,
+        YZ
+    }
+
+    private static void renderCircle(
+            VertexConsumer consumer,
+            Matrix4f pose,
+            float radius,
+            float thickness,
+            int segments,
+            int color,
+            CirclePlane plane
+    ) {
+        float inner = radius - thickness / 2.0f;
+        float outer = radius + thickness / 2.0f;
+
+        for (int i = 0; i < segments; i++) {
+            float a1 = Mth.TWO_PI * i / segments;
+            float a2 = Mth.TWO_PI * (i + 1) / segments;
+
+            float cos1 = Mth.cos(a1);
+            float sin1 = Mth.sin(a1);
+            float cos2 = Mth.cos(a2);
+            float sin2 = Mth.sin(a2);
+
+            addCircleQuad(
+                    consumer, pose,
+                    inner, outer,
+                    cos1, sin1,
+                    cos2, sin2,
+                    color, plane
+            );
+        }
+    }
+
+    private static void addCircleQuad(
+            VertexConsumer consumer,
+            Matrix4f pose,
+            float inner,
+            float outer,
+            float cos1,
+            float sin1,
+            float cos2,
+            float sin2,
+            int color,
+            CirclePlane plane
+    ) {
+        // FIXME: Performance
+        Vec3 o1 = circlePosition(outer, cos1, sin1, plane);
+        Vec3 i1 = circlePosition(inner, cos1, sin1, plane);
+        Vec3 i2 = circlePosition(inner, cos2, sin2, plane);
+        Vec3 o2 = circlePosition(outer, cos2, sin2, plane);
+
+        consumer.vertex(pose, (float) o1.x, (float) o1.y, (float) o1.z)
+                .color(color)
+                .endVertex();
+        consumer.vertex(pose, (float) i1.x, (float) i1.y, (float) i1.z)
+                .color(color)
+                .endVertex();
+        consumer.vertex(pose, (float) i2.x, (float) i2.y, (float) i2.z)
+                .color(color)
+                .endVertex();
+
+        consumer.vertex(pose, (float) o1.x, (float) o1.y, (float) o1.z)
+                .color(color)
+                .endVertex();
+        consumer.vertex(pose, (float) i2.x, (float) i2.y, (float) i2.z)
+                .color(color)
+                .endVertex();
+        consumer.vertex(pose, (float) o2.x, (float) o2.y, (float) o2.z)
+                .color(color)
+                .endVertex();
+    }
+
+    private static Vec3 circlePosition(
+            float radius,
+            float cos,
+            float sin,
+            CirclePlane plane
+    ) {
+        return switch (plane) {
+            case XY -> new Vec3(
+                    cos * radius,
+                    sin * radius,
+                    0
+            );
+
+            case XZ -> new Vec3(
+                    cos * radius,
+                    0,
+                    sin * radius
+            );
+
+            case YZ -> new Vec3(
+                    0,
+                    cos * radius,
+                    sin * radius
+            );
+        };
+    }
 
     // This method assumes the input colour has no alpha value!
     private static int alphaFadeNodes(int baseColor, float dist) {
@@ -164,19 +419,23 @@ public class GoggleRenderer {
 
         // Second pass
         for (SimpleWiredNetwork network : networks) {
+            if (!network.isDisplayed()) continue;
             renderNetworkNodes(matrices, camera, network);
         }
         for (SimpleWiredNetwork network : networks) {
+            if (!network.isDisplayed()) continue;
             renderNetworkLeaves(matrices, camera, network);
         }
 
         // Third pass
         for (SimpleWiredNetwork network : networks) {
+            if (!network.isDisplayed()) continue;
             renderNetworkConnections(matrices, camera, network);
         }
 
         // Fourth pass
         for (SimpleWiredNetwork network : networks) {
+            if (!network.isDisplayed()) continue;
             renderNetworkNametags(matrices, camera, network);
         }
     }
