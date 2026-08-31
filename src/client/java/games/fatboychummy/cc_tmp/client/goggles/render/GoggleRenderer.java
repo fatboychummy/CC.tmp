@@ -25,6 +25,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -51,8 +52,8 @@ public class GoggleRenderer {
     private static final int BASE_ALPHA = 0x55;
     private static final int BASE_NAMETAG_ALPHA = 0xff;
 
-    private static final float PING_SPEED = 30.0f; // Radius expansion in blocks, per second.
-    private static final float PING_DECEL = 8.5f; // Rate at which above decreases per second.
+    private static final float PING_SPEED = 50.0f; // Radius expansion in blocks, per second.
+    private static final float PING_DECEL = 20.0f; // Rate at which above decreases per second.
     private static final float PING_MIN_SPEED = 5.0f; // Minimum ping speed.
     private static float currentPingSpeed = 0.0f;
     private static long lastPingUpdate = 0L;
@@ -148,7 +149,7 @@ public class GoggleRenderer {
         return true;
     }
 
-    private static final int CIRCLE_COUNT = 7;
+    //private static final int CIRCLE_COUNT = 7;
     private static void animatePing(WorldRenderContext context) {
         if (!pinging) return;
         long now = System.nanoTime();
@@ -160,71 +161,145 @@ public class GoggleRenderer {
         MultiBufferSource.BufferSource buffer = Minecraft.getInstance().renderBuffers().bufferSource();
         VertexConsumer consumer = buffer.getBuffer(GoggleRenderTypes.GOGGLE_TRI_DT);
 
-        Vec3 cameraPos = context.camera().getPosition();
+        Camera cam = context.camera();
+        Vec3 cameraPos = cam.getPosition();
         Vec3 relative = pingOrigin.subtract(cameraPos);
         PoseStack matrices = context.matrixStack();
         matrices.pushPose();
 
         matrices.translate(relative.x, relative.y, relative.z);
-        int color = alphaFadeNodes(0xaaaaaa, pingSize);
+        int color = alphaFadePing(NetworkColorAssigner.Color.CYAN.getValue(), pingSize);
 
+        renderSphere(
+                consumer,
+                matrices.last().pose(),
+                pingSize,
+                8,
+                16,
+                color,
+                cam.getLookVector()
+        );
 
-        float spacing = pingSize / (CIRCLE_COUNT + 0.15f);
-        for (int i = -CIRCLE_COUNT; i <= CIRCLE_COUNT; i++) {
-            float offset = i * spacing;
-            float ringRadius = Mth.sqrt(
-                    pingSize * pingSize - offset * offset
-            );
-
-            // XZ
-            matrices.pushPose();
-            matrices.translate(0.0f, offset, 0.0f);
-
-            renderCircle(
-                    consumer,
-                    matrices.last().pose(),
-                    ringRadius,
-                    0.25f,
-                    64,
-                    color,
-                    CirclePlane.XZ
-            );
-            matrices.popPose();
-
-            // XY
-            matrices.pushPose();
-            matrices.translate(0.0f, 0.0f, offset);
-
-            renderCircle(
-                    consumer,
-                    matrices.last().pose(),
-                    ringRadius,
-                    0.25f,
-                    64,
-                    color,
-                    CirclePlane.XY
-            );
-            matrices.popPose();
-
-            // YZ
-            matrices.pushPose();
-            matrices.translate(offset, 0.0f, 0.0f);
-
-            renderCircle(
-                    consumer,
-                    matrices.last().pose(),
-                    ringRadius,
-                    0.25f,
-                    64,
-                    color,
-                    CirclePlane.YZ
-            );
-            matrices.popPose();
-        }
 
         matrices.popPose();
 
         buffer.endBatch(GoggleRenderTypes.GOGGLE_TRI_DT);
+    }
+
+    private static int adjustBrightness(int color, float brightness) {
+        int alpha = color & 0xff000000;
+        int r = (color >> 16)  & 0xff;
+        int g = (color >> 8)  & 0xff;
+        int b = color & 0xff;
+        r = Mth.clamp((int) (r * brightness), 0, 255);
+        g = Mth.clamp((int) (g * brightness), 0, 255);
+        b = Mth.clamp((int) (b * brightness), 0, 255);
+        return alpha | (r << 16) | (g << 8) | b;
+    }
+
+    private static int getTriangleColor(
+            int color,
+            float x1, float y1, float z1,
+            float x2, float y2, float z2,
+            float x3, float y3, float z3,
+            Vector3f look
+    ) {
+        float cx = (x1 + x2 + x3) / 3.0f;
+        float cy = (y1 + y2 + y3) / 3.0f;
+        float cz = (z1 + z2 + z3) / 3.0f;
+
+        float length = Mth.sqrt(cx * cx + cy * cy + cz * cz);
+        float facing = Math.max(
+                ((cx / length) * look.x
+                        + (cy / length) * look.y
+                        + (cz / length) * look.z),
+                0.0f
+        );
+
+        float brightness = 0.2f + 0.8f * ((float) Math.pow(facing, 2.5d));
+        return adjustBrightness(color, brightness);
+    }
+
+    private static void renderSphere(
+            VertexConsumer consumer,
+            Matrix4f pose,
+            float radius,
+            int latitudeSegments,
+            int longitudeSegments,
+            int color,
+            Vector3f lookVector
+    ) {
+
+        for (int lat = 0; lat < latitudeSegments; lat++) {
+            float phi1 = Mth.PI * lat / latitudeSegments;
+            float phi2 = Mth.PI * (lat + 1) / latitudeSegments;
+
+            float y1 = Mth.cos(phi1) * radius;
+            float y2 = Mth.cos(phi2) * radius;
+
+            float r1 = Mth.sin(phi1) * radius;
+            float r2 = Mth.sin(phi2) * radius;
+
+            for (int lon = 0; lon < longitudeSegments; lon++) {
+                float theta1 = Mth.TWO_PI * lon / longitudeSegments;
+                float theta2 = Mth.TWO_PI * (lon + 1) / longitudeSegments;
+
+                float x11 = Mth.cos(theta1) * r1;
+                float z11 = Mth.sin(theta1) * r1;
+
+                float x12 = Mth.cos(theta2) * r1;
+                float z12 = Mth.sin(theta2) * r1;
+
+                float x21 = Mth.cos(theta1) * r2;
+                float z21 = Mth.sin(theta1) * r2;
+
+                float x22 = Mth.cos(theta2) * r2;
+                float z22 = Mth.sin(theta2) * r2;
+
+                // Triangle 1
+                int t1color = getTriangleColor(
+                        color,
+                        x11, y1, z11,
+                        x21, y2, z21,
+                        x22, y2, z22,
+                        lookVector
+                );
+
+                consumer.vertex(pose, x11, y1, z11)
+                        .color(t1color)
+                        .endVertex();
+
+                consumer.vertex(pose, x21, y2, z21)
+                        .color(t1color)
+                        .endVertex();
+
+                consumer.vertex(pose, x22, y2, z22)
+                        .color(t1color)
+                        .endVertex();
+
+
+                // Triangle 2
+                int t2color = getTriangleColor(
+                        color,
+                        x11, y1, z11,
+                        x22, y2, z22,
+                        x12, y1, z12,
+                        lookVector
+                );
+
+                consumer.vertex(pose, x11, y1, z11)
+                        .color(t2color)
+                        .endVertex();
+
+                consumer.vertex(pose, x22, y2, z22)
+                        .color(t2color)
+                        .endVertex();
+
+                consumer.vertex(pose, x12, y1, z12)
+                        .color(t2color)
+                        .endVertex();
+            }
+        }
     }
 
     private enum CirclePlane {
@@ -328,6 +403,10 @@ public class GoggleRenderer {
                     sin * radius
             );
         };
+    }
+
+    private static int alphaFadePing(int baseColor, float dist) {
+        return ((int) (BASE_ALPHA * (1.0f - dist / FADE_END_DISTANCE))) << 24 | baseColor;
     }
 
     // This method assumes the input colour has no alpha value!
